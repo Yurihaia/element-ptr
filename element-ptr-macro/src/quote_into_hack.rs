@@ -2,6 +2,7 @@
 
 // ripped from quote. uses private API. lol. lmao.
 // idk why quote doesn't have this. would make it so much more efficient.
+#[cfg(feature = "quote_into_hack")]
 macro_rules! quote_into {
     // Special case rule for a single tt, for performance.
     ($stream:expr => $tt:tt) => {{
@@ -26,6 +27,14 @@ macro_rules! quote_into {
     }};
 }
 
+#[cfg(not(feature = "quote_into_hack"))]
+macro_rules! quote_into {
+    ($stream:expr => $($t:tt)*) => { {
+        (&mut $stream).extend(quote::quote! { $($t)* });
+    } };
+}
+
+#[cfg(feature = "quote_into_hack")]
 macro_rules! quote_spanned_into {
     // Special case rule for a single tt, for performance.
     ($stream:expr, $span:expr => $tt:tt) => {{
@@ -56,6 +65,13 @@ macro_rules! quote_spanned_into {
         quote::quote_each_token_spanned! { _s _span $($tt)* };
         _s
     }};
+}
+
+#[cfg(not(feature = "quote_into_hack"))]
+macro_rules! quote_spanned_into {
+    ($stream:expr, $span:expr => $($t:tt)*) => { {
+        (&mut $stream).extend(quote::quote_spanned! { $span=> $($t)* });
+    } };
 }
 
 pub(crate) use {quote_into, quote_spanned_into};

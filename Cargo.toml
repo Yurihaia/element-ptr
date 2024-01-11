@@ -2,11 +2,9 @@
 name = "element-ptr"
 version = "0.0.1"
 description = "A macro to make accessing elements through raw pointers easier."
-
 edition = "2021"
 authors = ["Yurihaia <17830663+Yurihaia@users.noreply.github.com>"]
 license = "MIT"
-
 repository = "https://github.com/Yurihaia/element-ptr"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
