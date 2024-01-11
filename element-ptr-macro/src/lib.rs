@@ -74,22 +74,44 @@ impl<'i> ToTokens for AccessListToTokensCtx<'i> {
             }
 
             match access {
-                Field(access) => match &access.field {
-                    FieldAccessType::Named(ident) => quote_into! { tokens =>
+                Field(FieldAccess { _dot, field }) => match &field {
+                    Some(FieldAccessType::Named(ident)) => quote_into! { tokens =>
                         let ptr = ptr.copy_addr(
                             ::core::ptr::addr_of!( ( *ptr.into_const() ) . #ident )
                         );
                     },
-                    FieldAccessType::Tuple(index) => quote_into! { tokens =>
+                    Some(FieldAccessType::Tuple(index)) => quote_into! { tokens =>
                         let ptr = ptr.copy_addr(
                             ::core::ptr::addr_of!( ( *ptr.into_const() ) . #index )
                         );
                     },
-                    FieldAccessType::Deref(..) => {
+                    Some(FieldAccessType::Deref(..)) => {
                         dirty = true;
                         quote_into! { tokens =>
                             let ptr = ptr.read();
                         }
+                    }
+                    // output something for r-a autocomplete.
+                    None => {
+                        // honestly i'm not quite sure why this specifically
+                        // lets r-a autocomplete after the dot, but it does, and also
+                        // gives a correct (and sort of fake) compiler error of
+                        // "unexpected token `)`".
+                        // i wish there was a better way to interact with r-a about this,
+                        // but this hack will have to do.
+                        let error = syn::Error::new_spanned(
+                            _dot,
+                            "expected an identifier, integer literal, or `*` after this `.`",
+                        )
+                        .into_compile_error();
+                        quote_into! { tokens =>
+                            let ptr = ptr.copy_addr(
+                                ::core::ptr::addr_of!( ( *ptr.into_const() ) #_dot )
+                            );
+                            #error;
+                        }
+                        // just stop generating from here.
+                        return;
                     }
                 },
                 Index(IndexAccess { index, .. }) => quote_into! { tokens =>
@@ -204,14 +226,20 @@ impl Parse for ElementAccess {
 // Also includes deref because it is similar.
 struct FieldAccess {
     _dot: Token![.],
-    field: FieldAccessType,
+    field: Option<FieldAccessType>,
 }
 
 impl Parse for FieldAccess {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self {
             _dot: input.parse()?,
-            field: input.parse()?,
+            field: {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.parse()?)
+                }
+            },
         })
     }
 }
