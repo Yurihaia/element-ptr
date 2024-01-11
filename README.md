@@ -122,7 +122,7 @@ derefence the pointer except for `.*`.
     The `=>` may be omitted if the cast is the last access in a group.
 3. <span id="sl3"></span>
     A dereference may return a value that is not a pointer only if it is the final access in the macro.<br>
-    Note that becaise this calls [`read()`] on the pointer, it can easily lead to duplicate values.
+    Note that because this calls [`read()`] on the pointer, it can easily lead to duplicate values.
     In general, only use this access on inner pointer types.
 
 [`addr_of!()`]: https://doc.rust-lang.org/core/ptr/macro.addr_of.html
