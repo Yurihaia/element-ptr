@@ -10,7 +10,7 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-element-ptr-macro = { path = "element-ptr-macro" }
+element-ptr-macro = { path = "element-ptr-macro", version = "0.0.1" }
 
 [workspace]
 members = ["element-ptr-macro", "quote_into_hack"]
