@@ -15,4 +15,4 @@ repository = "https://github.com/Yurihaia/element-ptr"
 element-ptr-macro = { path = "element-ptr-macro", version = "0.0.1" }
 
 [workspace]
-members = ["element-ptr-macro", "quote_into_hack"]
+members = ["element-ptr-macro"]

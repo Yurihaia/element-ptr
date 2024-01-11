@@ -4,12 +4,14 @@ use proc_macro2::{Ident, Span, TokenStream};
 
 use proc_macro_crate::FoundCrate;
 use quote::{quote, ToTokens};
-use quote_into_hack::quote_into;
 use syn::{
     bracketed, parenthesized,
     parse::{Parse, ParseStream},
     parse_macro_input, token, Expr, Index, LitInt, Token, Type,
 };
+
+mod quote_into_hack;
+use quote_into_hack::quote_into;
 
 #[proc_macro]
 pub fn element_ptr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {

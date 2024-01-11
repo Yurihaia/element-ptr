@@ -1,7 +1,7 @@
-// ripped from quote. uses private API. lol. lmao.
+#![allow(unused)]
 
+// ripped from quote. uses private API. lol. lmao.
 // idk why quote doesn't have this. would make it so much more efficient.
-#[macro_export]
 macro_rules! quote_into {
     // Special case rule for a single tt, for performance.
     ($stream:expr => $tt:tt) => {{
@@ -26,7 +26,6 @@ macro_rules! quote_into {
     }};
 }
 
-#[macro_export]
 macro_rules! quote_spanned_into {
     // Special case rule for a single tt, for performance.
     ($stream:expr, $span:expr => $tt:tt) => {{
@@ -58,3 +57,5 @@ macro_rules! quote_spanned_into {
         _s
     }};
 }
+
+pub(crate) use {quote_into, quote_spanned_into};

@@ -13,4 +13,3 @@ proc-macro-crate = "3"
 syn = "2"
 quote = "1"
 proc-macro2 = "1"
-quote_into_hack = { path = "../quote_into_hack", version = "0.0.1" }
