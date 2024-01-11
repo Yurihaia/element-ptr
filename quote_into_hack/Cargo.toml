@@ -1,0 +1,12 @@
+[package]
+name = "quote_into_hack"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# just target the exact version to prevent a breaking change.
+# this crate is obviously using non-public API but i doubt it will change.
+# maybe i will make a PR to `quote` at some point with this.
+quote = "1.0.35"

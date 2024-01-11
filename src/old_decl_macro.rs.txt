@@ -1,0 +1,154 @@
+// the old declarative macro, staying around for no real reason
+
+/// Returns the address of an inner element without created unneeded
+/// intermediate references.
+///
+/// The general syntax is
+/// ```
+/// element_ptr!(base_ptr => /* element accesses */ )
+/// ````
+/// The possible element accesses are:
+/// * `. $field`: Gets a pointer to the field specified by the field name
+///     of the struct behind the pointer.
+/// * `. $index`: Same as `. $field` but with a tuple index instead of a named struct field.
+/// * `[ $index ]`: Gets an element from a pointer to an array or slice at the specified index.
+/// * `+ $offset`: Equivalent to [`pointer::add()`]. See its documentation for more info.
+/// * `- $offset`: Equivalent to [`pointer::sub()`]. See its documentation for more info.
+/// * `u8+ $offset`: Equivalent to [`pointer::byte_add()`]. See its documentation for more info.
+/// * `u8- $offset`: Equivalent to [`pointer::byte_sub()`]. See its documentation for more info.
+/// * `as $type =>`: Casts the pointer to a pointer with a pointee type of `$type`.
+///     If this is the last access within a group, the `=>` may be omitted.
+/// * `( $accesses )`: Groups accesses. Has no effect on the order in which accesses are applied,
+///     it just exists to allow for syntactic clarity.
+/// * `.*`: [Reads] the value behind the pointer. This should generally only be used
+///     for moving into a child pointer.
+///
+/// If some access returns a value that is not a pointer (meaning `.*` or a group containing it
+/// as the last access), it will be a compiler error to have any accesses afterwards.
+///
+/// # Safety
+/// * Every intermediate pointer and the final pointer must remain within the bounds of the same
+///     allocated object. See [`pointer::offset()`] for more information.
+/// * The `.*` element access unconditionally reads the value from memory.
+///     See [`read()`] for more information.
+/// * Aside from `.*`, all other element accesses do not read from the memory they are pointing to.
+///     They also do not create intermediate references.
+///
+/// [Reads]: core::ptr::read
+/// [`read()`]: core::ptr::read
+/// [`pointer::add()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.add
+/// [`pointer::sub()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.sub
+/// [`pointer::byte_add()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.byte_add
+/// [`pointer::byte_sub()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.byte_sub
+/// [`pointer::offset()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.offset
+#[macro_export]
+#[cfg(not(doctest))] // just don't doctest any of these. Macros are way too hard to do.
+macro_rules! element_ptr {
+    (
+        $ptr:expr => $($t:tt)*
+    ) => {
+        {
+            $crate::helper::element_ptr_unsafe();
+            #[allow(unused_unsafe)]
+            unsafe { 'out: {
+                let ptr = $crate::helper::new_pointer($ptr);
+                $crate::__element_ptr_inner!('out ptr => $($t)*);
+            } }
+        }
+    };
+}
+
+// $prev should always be a local variable with the type helper::Pointer<_, _>.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __element_ptr_inner {
+    ($out:lifetime $prev:ident => ) => {
+        break $out $prev.into_inner();
+    };
+
+    ($out:lifetime $prev:ident => ( $($i:tt)* ) $($t:tt)* ) => {
+        let val = 'out: {
+            $crate::__element_ptr_inner!('out $prev => $($i)*);
+        };
+        $crate::__element_ptr_inner_dirty!($out val => $($t)*);
+    };
+
+    ($out:lifetime $prev:ident => + $add:tt $($t:tt)*) => {
+        let ptr = $prev.add($add);
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+    ($out:lifetime $prev:ident => - $add:tt $($t:tt)*) => {
+        let ptr = $prev.sub($add);
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+
+    ($out:lifetime $prev:ident => u8+ $add:tt $($t:tt)*) => {
+        let ptr = $prev.byte_add($add);
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+    ($out:lifetime $prev:ident => u8- $add:tt $($t:tt)*) => {
+        let ptr = $prev.byte_sub($add);
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+
+    // TODO: decide if casting should be included, and which one is better?.
+    // ($out:lifetime $prev:ident => as $cast:ty) => {
+    //     break $out $prev.cast::<$cast>().into_inner();
+    // };
+
+    ($out:lifetime $prev:ident => as $cast:ty => $($t:tt)*) => {
+        let ptr = $prev.cast::<$cast>();
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+    ($out:lifetime $prev:ident => as $cast:ty) => {
+        let ptr = $prev.cast::<$cast>();
+        $crate::__element_ptr_inner!($out ptr => );
+    };
+
+    // // a derefence of any value is fine, but if it continues
+    // // then the derefence target needs to be a pointer.
+    // ($out:lifetime $prev:ident => .* $($t:tt)*) => {
+    //     break $out $prev.read();
+    // };
+    ($out:lifetime $prev:ident => .* $($t:tt)*) => {
+        let ptr = $prev.read();
+        $crate::__element_ptr_inner_dirty!($out ptr => $($t)*);
+    };
+
+    ($out:lifetime $prev:ident => . $id:ident $($t:tt)*) => {
+        let ptr = $prev.copy_addr(
+            ::core::ptr::addr_of!((* $prev.into_const() ) . $id)
+        );
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+    // this will place consecutive tuple accesses as
+    // a floating point expression, but it still ends up being valid.
+    // it is really sketchy however.
+    ($out:lifetime $prev:ident => . $id:tt $($t:tt)*) => {
+        let ptr = $prev.copy_addr(
+            ::core::ptr::addr_of!((* $prev.into_const() ) . $id)
+        );
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+
+    ($out:lifetime $prev:ident => [ $idx:expr ] $($t:tt)*) => {
+        let ptr = $crate::helper::index($prev, $idx);
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+}
+
+// this is called when $prev may or may not be a pointer.
+#[macro_export]
+macro_rules! __element_ptr_inner_dirty {
+    // otherwise, return from the body with the value.
+    ($out:lifetime $prev:ident => ) => {
+        break $out $prev;
+    };
+    // if there are still tokens in the access,
+    // verify that the returned value is a pointer, and call
+    // the next access.
+    ($out:lifetime $prev:ident => $($t:tt)+) => {
+        let ptr = $crate::helper::new_pointer($prev);
+        $crate::__element_ptr_inner!($out ptr => $($t)*);
+    };
+}
