@@ -35,16 +35,13 @@ extern crate core;
 /// | Dereference     | `.*`          | [3](#sl3) | <code>ptr.[read]\()</code>                     |
 /// | Grouping        | `( ... )`     |           | Just groups the inner accesses for clarity.    |
 /// 
-/// 1. <span id="sl1">
-///     `count`/`bytes` may either be an integer literal or an expression wrapped in parentheses.
-///     </span>
-/// 2. <span id="sl2">
-///     The `=>` may be omitted if the cast is the last access in a group.
-///     </span>
-/// 3. <span id="sl3">
-///     A dereference may return a value that is not a pointer only if it is the final access in the macro.
-///     In general it is encouraged to not do this and only use deferencing for inner pointers.
-///     </span>
+/// 1. <span id="sl1"> `count`/`bytes` may either be an integer literal
+///     or an expression wrapped in parentheses. </span>
+/// 2. <span id="sl2"> The `=>` may be omitted if the cast is the
+///     last access in a group. </span>
+/// 3. <span id="sl3"> A dereference may return a value that is not a pointer only
+///     if it is the final access in the macro. In general it is encouraged to not
+///     do this and only use deferencing for inner pointers. </span>
 ///
 /// # Safety
 /// * All of the [requirements][offsetreq] for [`offset()`] must be upheld. This is relevant for every
