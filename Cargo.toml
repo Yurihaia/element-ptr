@@ -1,6 +1,6 @@
 [package]
 name = "element-ptr"
-version = "0.0.1"
+version = "0.0.2"
 description = "A macro to make accessing elements through raw pointers easier."
 edition = "2021"
 authors = ["Yurihaia <17830663+Yurihaia@users.noreply.github.com>"]
@@ -10,7 +10,7 @@ repository = "https://github.com/Yurihaia/element-ptr"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-element-ptr-macro = { path = "element-ptr-macro", version = "0.0.1" }
+element-ptr-macro = { path = "element-ptr-macro", version = "0.0.2" }
 
 [workspace]
 members = ["element-ptr-macro"]

@@ -1,6 +1,6 @@
 [package]
 name = "element-ptr-macro"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 description = "The internal macro crate for `element-ptr`."
 authors = ["Yurihaia <17830663+Yurihaia@users.noreply.github.com>"]
