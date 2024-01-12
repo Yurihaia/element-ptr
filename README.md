@@ -95,7 +95,7 @@ Invoking this macro will always be `unsafe` for a few reasons:
     this cannot be asserted at compile time.
     
 3. This macro supports manipulating [`NonNull<T>`]s, and therefore any offsets could potentially
-    cause the pointer to move to null, causing UB. This is almost always the same as #1, because a
+    cause the pointer to move to null, causing UB. This is almost always the same as #1, because
     the address `0` can never be within bounds.
     
 ## Syntax & Semantics
