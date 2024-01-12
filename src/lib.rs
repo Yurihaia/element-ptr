@@ -1,48 +1,168 @@
 #![no_std]
 extern crate core;
 
-/// Returns the address of an inner element without created unneeded
+/// Returns the address of an inner element without creating unneeded
 /// intermediate references.
 ///
 /// The general syntax is
+#[cfg_attr(doctest, doc = "````notest")] // don't doctest this.
 /// ```
 /// element_ptr!(base_ptr => /* element accesses */ )
 /// ````
-/// The possible element accesses are:
-/// * `. $field`: Gets a pointer to the field specified by the field name
-///     of the struct behind the pointer.
-/// * `. $index`: Same as `. $field` but with a tuple index instead of a named struct field.
-/// * `[ $index ]`: Gets an element from a pointer to an array or slice at the specified index.
-/// * `+ $offset`: Equivalent to [`pointer::add()`]. See its documentation for more info.
-/// * `- $offset`: Equivalent to [`pointer::sub()`]. See its documentation for more info.
-/// * `u8+ $offset`: Equivalent to [`pointer::byte_add()`]. See its documentation for more info.
-/// * `u8- $offset`: Equivalent to [`pointer::byte_sub()`]. See its documentation for more info.
-/// * `as $type =>`: Casts the pointer to a pointer with a pointee type of `$type`.
-///     If this is the last access within a group, the `=>` may be omitted.
-/// * `( $accesses )`: Groups accesses. Has no effect on the order in which accesses are applied,
-///     it just exists to allow for syntactic clarity.
-/// * `.*`: [Reads] the value behind the pointer. This should generally only be used
-///     for moving into a child pointer.
-///
-/// If some access returns a value that is not a pointer (meaning `.*` or a group containing it
-/// as the last access), it will be a compiler error to have any accesses afterwards.
+/// where `base_ptr` may be any expression that evaluates to a value of the following types:
+/// * [`*const T`]
+/// * [`*mut T`]
+/// * [`NonNull<T>`]
+/// 
+/// All accesses (besides a dereference) will maintain that pointer type of the input pointer.
+/// This is especially nice with [`NonNull<T>`] because it makes everything involving it much
+/// more ergonomic.
+/// 
+/// ### Element accesses
+/// 
+/// The following a table describes each of the possible accesses that can be inside the macro.
+/// These can all be chained by simply putting one after another.
+/// 
+/// | Access Kind     | Syntax        |           | Equivalent Pointer Expression                  |
+/// |-----------------|---------------|-----------|------------------------------------------------|
+/// | Field           | `.field`      |           | <code>[addr_of!]\((*ptr).field)</code>         |
+/// | Index           | `[index]`     |           | <code>ptr.[cast::\<T>]\().[add]\(index)</code> |
+/// | Add Offset      | `+ count`     | [1](#sl1) | <code>ptr.[add]\(count)</code>                 |
+/// | Sub Offset      | `- count`     | [1](#sl1) | <code>ptr.[sub]\(count)</code>                 |
+/// | Byte Add Offset | `u8+ bytes`   | [1](#sl1) | <code>ptr.[byte_add]\(bytes)</code>            |
+/// | Byte Sub Offset | `u8- bytes`   | [1](#sl1) | <code>ptr.[byte_sub]\(bytes)</code>            |
+/// | Cast            | `as T =>`     | [2](#sl2) | <code>ptr.[cast::\<T>]\()</code>               |
+/// | Dereference     | `.*`          | [3](#sl3) | <code>ptr.[read]\()</code>                     |
+/// | Grouping        | `( ... )`     |           | Just groups the inner accesses for clarity.    |
+/// 
+/// 1. <span id="sl1">
+///     `count`/`bytes` may either be an integer literal or an expression wrapped in parentheses.
+///     </span>
+/// 2. <span id="sl2">
+///     The `=>` may be omitted if the cast is the last access in a group.
+///     </span>
+/// 3. <span id="sl3">
+///     A dereference may return a value that is not a pointer only if it is the final access in the macro.
+///     In general it is encouraged to not do this and only use deferencing for inner pointers.
+///     </span>
 ///
 /// # Safety
-/// * Every intermediate pointer and the final pointer must remain within the bounds of the same
-///     allocated object. See [`pointer::offset()`] for more information.
-/// * The `.*` element access unconditionally reads the value from memory.
-///     See [`read()`] for more information.
-/// * Aside from `.*`, all other element accesses do not read from the memory they are pointing to.
-///     They also do not create intermediate references.
-///
-/// [Reads]: core::ptr::read
-/// [`read()`]: core::ptr::read
-/// [`pointer::add()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.add
-/// [`pointer::sub()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.sub
-/// [`pointer::byte_add()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.byte_add
-/// [`pointer::byte_sub()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.byte_sub
-/// [`pointer::offset()`]: https://doc.rust-lang.org/nightly/core/primitive.pointer.html#method.offset
-#[cfg(not(doctest))] // just don't doctest any of these. Macros are way too hard to do.
+/// * All of the [requirements][offsetreq] for [`offset()`] must be upheld. This is relevant for every
+///     access except for dereferencing, grouping, and casting.
+/// * The derefence access (`.*`) unconditionally reads from the pointer, and must not violate
+///     any [requirements][readreq] related to that.
+/// 
+/// # Examples
+/// 
+/// The following example should give you a general sense of what the macro is capable of,
+/// as well as a pretty good reference for how to use it.
+/// 
+/// ```
+/// use element_ptr::element_ptr;
+/// 
+/// use std::{
+///     alloc::{alloc, dealloc, Layout, handle_alloc_error},
+///     ptr,
+/// };
+/// 
+/// struct Example {
+///     field_one: u32,
+///     uninit: u32,
+///     child_struct: ChildStruct,
+///     another: *mut Example,
+/// }
+/// 
+/// struct ChildStruct {
+///     data: [&'static str; 6],
+/// }
+/// 
+/// let example = unsafe {
+///     // allocate two `Example`s on the heap, and then initialize them part by part.
+///     let layout = Layout::new::<Example>();
+///     
+///     let example = alloc(layout).cast::<Example>();
+///     if example.is_null() { handle_alloc_error(layout) };
+/// 
+///     let other_example = alloc(layout).cast::<Example>();
+///     if other_example.is_null() { handle_alloc_error(layout) };
+///     
+///     // Get the pointer to `field_one` and initialize it.
+///     element_ptr!(example => .field_one).write(100u32);
+///     // But the `uninit` field isn't initialized.
+///     // We can't take a reference to the struct without causing UB!
+///     
+///     // Now initialize the child struct.
+///     let string = "It is normally such a pain to manipulate raw pointers, isn't it?";
+///     
+///     // Get each word from the sentence
+///     for (index, word) in string.split(' ').enumerate() {
+///         // and push alternating words to each child struct.
+///         if index % 2 == 0 {
+///             // The index can be any arbitrary expression that evaluates to an usize.
+///             element_ptr!(example => .child_struct.data[index / 2]).write(word);
+///         } else {
+///             element_ptr!(other_example => .child_struct.data[index / 2]).write(word);
+///         }
+///     }
+///     
+///     element_ptr!(example => .another).write(other_example);
+///     
+///     example
+/// };
+/// 
+/// 
+/// // Now that the data is initialized, we can read data from the structs.
+/// 
+/// unsafe {
+///     // The `element_ptr!` macro will get a raw pointer to the data.
+///     let field_one_ptr: *mut u32 = element_ptr!(example => .field_one);
+///     
+///     // This means you can even get a pointer to a field that is not initialized.
+///     let uninit_field_ptr: *mut u32 = element_ptr!(example => .uninit);
+///     
+///     assert_eq!(*field_one_ptr, 100);
+/// 
+///     let seventh_word = element_ptr!(example => .child_struct.data[3]);
+///     
+///     assert_eq!(*seventh_word, "to");
+///     
+///     // The `.*` access is used here to go into the pointer to `other_example`.
+///     // Note that this requires the field `another` to be initialized, but not any
+///     // of the other fields in `example`.
+///     // As long as you don't use `.*`, you can be confident that no data will ever
+///     // be dereferenced.
+///     
+///     let second_word = element_ptr!(
+///         example => .another.*.child_struct.data[0]
+///     );
+/// 
+///     assert_eq!(*second_word, "is");
+/// 
+///     // Now lets deallocate everything so MIRI doesn't yell at me for leaking memory.
+///     let layout = Layout::new::<Example>();
+///     
+///     // Here as a convenience, we can cast the pointer to another type using `as T`.
+///     dealloc(element_ptr!(example => .another.* as u8), layout);
+///     // Of course this is simply the same as using `as *mut T`
+///     dealloc(example as *mut u8, layout);
+/// }
+/// ```
+/// 
+// the following links need to be explicitly put because rustdoc cannot refer to pointer methods.
+/// [addr_of!]: core::ptr::addr_of!
+/// [read]: https://doc.rust-lang.org/core/primitive.pointer.html#method.read
+/// [add]: https://doc.rust-lang.org/core/primitive.pointer.html#method.add
+/// [sub]: https://doc.rust-lang.org/core/primitive.pointer.html#method.sub
+/// [byte_add]: https://doc.rust-lang.org/core/primitive.pointer.html#method.byte_add
+/// [byte_sub]: https://doc.rust-lang.org/core/primitive.pointer.html#method.byte_sub
+/// [`offset()`]: https://doc.rust-lang.org/core/primitive.pointer.html#method.offset
+/// [offsetreq]: https://doc.rust-lang.org/core/primitive.pointer.html#safety-2
+/// [readreq]: https://doc.rust-lang.org/core/ptr/fn.read.html#safety
+/// [cast::\<T>]: https://doc.rust-lang.org/core/primitive.pointer.html#method.cast
+/// [`*const T`]: https://doc.rust-lang.org/core/primitive.pointer.html
+/// [`*mut T`]: https://doc.rust-lang.org/core/primitive.pointer.html
+/// [`NonNull<T>`]: core::ptr::NonNull
+// #[cfg(not(doctest))] // just don't doctest any of these. Macros are way too hard to do.
 pub use element_ptr_macro::element_ptr;
 
 #[doc(hidden)]

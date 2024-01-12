@@ -116,14 +116,17 @@ derefence the pointer except for `.*`.
 | Grouping        | `( ... )`     |           | Just groups the inner accesses for clarity.    |
 
 
-1. <span id="sl1"></span>
+1. <span id="sl1">
     `count`/`bytes` may either be an integer literal or an expression wrapped in parentheses.
-2. <span id="sl2"></span>
+    </span>
+2. <span id="sl2">
     The `=>` may be omitted if the cast is the last access in a group.
-3. <span id="sl3"></span>
+    </span>
+3. <span id="sl3">
     A dereference may return a value that is not a pointer only if it is the final access in the macro.<br>
     Note that because this calls [`read()`] on the pointer, it can easily lead to duplicate values.
     In general, only use this access on inner pointer types.
+    </span>
 
 [`addr_of!()`]: https://doc.rust-lang.org/core/ptr/macro.addr_of.html
 [addr_of!]: https://doc.rust-lang.org/core/ptr/macro.addr_of.html
