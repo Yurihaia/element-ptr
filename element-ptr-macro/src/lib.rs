@@ -18,8 +18,7 @@ pub fn element_ptr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as MacroInput);
 
     let base_crate = {
-        let found =
-            proc_macro_crate::crate_name("element-ptr").unwrap_or_else(|_| FoundCrate::Itself);
+        let found = proc_macro_crate::crate_name("element-ptr").unwrap_or(FoundCrate::Itself);
 
         match found {
             FoundCrate::Itself => String::from("element_ptr"),

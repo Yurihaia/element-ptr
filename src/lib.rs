@@ -13,16 +13,16 @@ extern crate core;
 /// * [`*const T`]
 /// * [`*mut T`]
 /// * [`NonNull<T>`]
-/// 
+///
 /// All accesses (besides a dereference) will maintain that pointer type of the input pointer.
 /// This is especially nice with [`NonNull<T>`] because it makes everything involving it much
 /// more ergonomic.
-/// 
+///
 /// ### Element accesses
-/// 
+///
 /// The following a table describes each of the possible accesses that can be inside the macro.
 /// These can all be chained by simply putting one after another.
-/// 
+///
 /// | Access Kind     | Syntax        |           | Equivalent Pointer Expression                  |
 /// |-----------------|---------------|-----------|------------------------------------------------|
 /// | Field           | `.field`      |           | <code>[addr_of!]\((*ptr).field)</code>         |
@@ -34,7 +34,7 @@ extern crate core;
 /// | Cast            | `as T =>`     | [2](#sl2) | <code>ptr.[cast::\<T>]\()</code>               |
 /// | Dereference     | `.*`          | [3](#sl3) | <code>ptr.[read]\()</code>                     |
 /// | Grouping        | `( ... )`     |           | Just groups the inner accesses for clarity.    |
-/// 
+///
 /// 1. <span id="sl1"> `count`/`bytes` may either be an integer literal
 ///     or an expression wrapped in parentheses. </span>
 /// 2. <span id="sl2"> The `=>` may be omitted if the cast is the
@@ -48,38 +48,38 @@ extern crate core;
 ///     access except for dereferencing, grouping, and casting.
 /// * The derefence access (`.*`) unconditionally reads from the pointer, and must not violate
 ///     any [requirements][readreq] related to that.
-/// 
+///
 /// # Examples
-/// 
+///
 /// The following example should give you a general sense of what the macro is capable of,
 /// as well as a pretty good reference for how to use it.
-/// 
+///
 /// ```
 /// use element_ptr::element_ptr;
-/// 
+///
 /// use std::{
 ///     alloc::{alloc, dealloc, Layout, handle_alloc_error},
 ///     ptr,
 /// };
-/// 
+///
 /// struct Example {
 ///     field_one: u32,
 ///     uninit: u32,
 ///     child_struct: ChildStruct,
 ///     another: *mut Example,
 /// }
-/// 
+///
 /// struct ChildStruct {
 ///     data: [&'static str; 6],
 /// }
-/// 
+///
 /// let example = unsafe {
 ///     // allocate two `Example`s on the heap, and then initialize them part by part.
 ///     let layout = Layout::new::<Example>();
 ///     
 ///     let example = alloc(layout).cast::<Example>();
 ///     if example.is_null() { handle_alloc_error(layout) };
-/// 
+///
 ///     let other_example = alloc(layout).cast::<Example>();
 ///     if other_example.is_null() { handle_alloc_error(layout) };
 ///     
@@ -106,10 +106,10 @@ extern crate core;
 ///     
 ///     example
 /// };
-/// 
-/// 
+///
+///
 /// // Now that the data is initialized, we can read data from the structs.
-/// 
+///
 /// unsafe {
 ///     // The `element_ptr!` macro will get a raw pointer to the data.
 ///     let field_one_ptr: *mut u32 = element_ptr!(example => .field_one);
@@ -118,7 +118,7 @@ extern crate core;
 ///     let uninit_field_ptr: *mut u32 = element_ptr!(example => .uninit);
 ///     
 ///     assert_eq!(*field_one_ptr, 100);
-/// 
+///
 ///     let seventh_word = element_ptr!(example => .child_struct.data[3]);
 ///     
 ///     assert_eq!(*seventh_word, "to");
@@ -132,9 +132,9 @@ extern crate core;
 ///     let second_word = element_ptr!(
 ///         example => .another.*.child_struct.data[0]
 ///     );
-/// 
+///
 ///     assert_eq!(*second_word, "is");
-/// 
+///
 ///     // Now lets deallocate everything so MIRI doesn't yell at me for leaking memory.
 ///     let layout = Layout::new::<Example>();
 ///     
@@ -144,7 +144,7 @@ extern crate core;
 ///     dealloc(example as *mut u8, layout);
 /// }
 /// ```
-/// 
+///
 // the following links need to be explicitly put because rustdoc cannot refer to pointer methods.
 /// [addr_of!]: core::ptr::addr_of!
 /// [read]: https://doc.rust-lang.org/core/primitive.pointer.html#method.read
@@ -165,11 +165,21 @@ pub use element_ptr_macro::element_ptr;
 #[doc(hidden)]
 pub mod helper {
     use core::{marker::PhantomData, mem::ManuallyDrop};
-
+    /// A trait that describes the mutability of a pointer.
+    ///
+    /// # Safety
+    /// * The types that implement this trait should act as a "brand" on
+    ///     the pointer type, uniquely identifying it.
+    /// * `Var<T>` should have the same variance as `Raw<T>`.
     pub unsafe trait Mutability {
         type Var<T: ?Sized>;
         type Raw<T: ?Sized>: IsPtr<M = Self, T = T>;
     }
+    /// A trait that describes a pointer.
+    ///
+    /// # Safety
+    /// * This should only be implemented on a pointer type. This type must be allowed to be
+    ///     transmuted to a `*const T` and read from.
     pub unsafe trait IsPtr: Copy {
         type M: Mutability;
         type T: ?Sized;
@@ -215,12 +225,12 @@ pub mod helper {
     #[repr(transparent)]
     pub struct Pointer<M: Mutability, T: ?Sized>(*const T, PhantomData<(M, M::Var<T>)>);
 
-    impl<M: Mutability, T> Clone for Pointer<M, T> {
+    impl<M: Mutability, T: ?Sized> Clone for Pointer<M, T> {
         fn clone(&self) -> Self {
             *self
         }
     }
-    impl<M: Mutability, T> Copy for Pointer<M, T> {}
+    impl<M: Mutability, T: ?Sized> Copy for Pointer<M, T> {}
 
     #[inline(always)]
     pub const fn new_pointer<P: IsPtr>(ptr: P) -> Pointer<P::M, P::T> {
@@ -229,7 +239,7 @@ pub mod helper {
         unsafe { Pointer(transmute_unchecked::<P, *const P::T>(ptr), PhantomData) }
     }
 
-    impl<M: Mutability, T> Pointer<M, T> {
+    impl<M: Mutability, T: ?Sized> Pointer<M, T> {
         /// Copies the address and type of a pointer to this pointer, keeping
         /// mutability intact.
         ///
@@ -257,6 +267,9 @@ pub mod helper {
         pub const fn cast<U>(self) -> Pointer<M, U> {
             Pointer(self.0.cast(), PhantomData)
         }
+    }
+
+    impl<M: Mutability, T> Pointer<M, T> {
         /// Calculates the offset of this pointer in units of `T`.
         ///
         /// This function is a wrapper around [`pointer::add()`].
@@ -338,7 +351,7 @@ pub mod helper {
     // This is a freestanding function to make the error message
     // when T doesn't implement `CanIndex` slightly better.
     #[inline(always)]
-    pub const unsafe fn index<M: Mutability, T>(
+    pub const unsafe fn index<M: Mutability, T: ?Sized>(
         ptr: Pointer<M, T>,
         index: usize,
     ) -> Pointer<M, T::E>
